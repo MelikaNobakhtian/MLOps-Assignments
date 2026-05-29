@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment variables
+.env
+*.env
+
+# DVC - generated outputs (no leading slash = matches anywhere in repo)
+data/processed/
+reports/
+
+# Keep raw data in git for this homework (it's tiny sample data)
+# If you want DVC to manage it instead, uncomment:
+# data/raw/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
