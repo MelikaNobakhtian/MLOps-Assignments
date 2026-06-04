@@ -1,0 +1,8 @@
+table,column,pii_type,decision,reason
+listing,listing_id,entity identifier,keep as entity key only,needed to define one row per listing; not a model input
+host,host_id,direct identifier,drop after join,internal database key; not a model feature
+host,host_pseudo_id,pseudonymized identifier,drop after join,still links to an individual; not needed as a feature
+listing,license,regulatory identifier,drop,legal registration number; not a model input
+review,review_id,entity identifier,drop; aggregate in SQL only,individual review key; not a model feature
+review,reviewer_id,direct identifier,drop; aggregate in SQL only,links to a real user account
+review,reviewer_pseudo_id,pseudonymized identifier,drop; aggregate in SQL only,pseudonymized but still individual-linking
