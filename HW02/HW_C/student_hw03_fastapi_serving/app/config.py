@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import os
 from typing import List
+from dotenv import load_dotenv
+
+# Load .env file explicitly 
+load_dotenv()
 
 APP_TITLE = "QBC12 HW03 Listing Availability Prediction API"
 APP_VERSION = "0.1.0"
@@ -20,7 +24,7 @@ POSITIVE_LABEL = "high_demand_proxy"
 NEGATIVE_LABEL = "not_high_demand_proxy"
 
 # TODO: Use this exact feature order when building the prediction DataFrame.
-EXPECTED_FEATURE_COLUMNS: List[str] = ['room_type', 'property_type', 'neighbourhood_name', 'accommodates', 'bedrooms', 'beds', 'bathrooms', 'listing_price', 'minimum_nights', 'maximum_nights', 'instant_bookable', 'host_is_superhost', 'host_listing_count', 'total_reviews_before_cutoff', 'unique_reviewers_before_cutoff', 'avg_comment_len_before_cutoff', 'max_comment_len_before_cutoff', 'days_since_last_review', 'available_days_last_90d', 'available_rate_last_90d', 'avg_minimum_nights_calendar_last_90d', 'avg_maximum_nights_calendar_last_90d', 'available_days_last_30d', 'available_rate_last_30d', 'avg_minimum_nights_calendar_last_30d', 'avg_maximum_nights_calendar_last_30d']
+EXPECTED_FEATURE_COLUMNS: List[str] = ['room_type', 'property_type', 'neighbourhood_name', 'accommodates', 'bedrooms', 'beds', 'bathrooms', 'listing_price', 'minimum_nights', 'maximum_nights', 'instant_bookable', 'is_superhost', 'host_listing_count', 'total_reviews_before_cutoff', 'unique_reviewers_before_cutoff', 'avg_comment_len_before_cutoff', 'max_comment_len_before_cutoff', 'days_since_last_review', 'available_days_last_90d', 'available_rate_last_90d', 'avg_minimum_nights_calendar_last_90d', 'avg_maximum_nights_calendar_last_90d', 'available_days_last_30d', 'available_rate_last_30d', 'avg_minimum_nights_calendar_last_30d', 'avg_maximum_nights_calendar_last_30d']
 
 # TODO: These fields must never be accepted as model input.
 FORBIDDEN_FIELDS: List[str] = ['listing_id', 'cutoff_date', 'dataset_version', 'future_calendar_days_observed_30d', 'future_available_days_30d', 'future_available_rate_30d', 'high_demand_proxy']

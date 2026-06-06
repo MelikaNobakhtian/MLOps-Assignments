@@ -11,7 +11,7 @@
     "minimum_nights",
     "maximum_nights",
     "instant_bookable",
-    "host_is_superhost",
+    "is_superhost",
     "host_listing_count",
     "total_reviews_before_cutoff",
     "unique_reviewers_before_cutoff",

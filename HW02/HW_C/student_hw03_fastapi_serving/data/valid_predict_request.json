@@ -10,7 +10,7 @@
   "minimum_nights": 3,
   "maximum_nights": 356,
   "instant_bookable": false,
-  "host_is_superhost": true,
+  "is_superhost": true,
   "host_listing_count": 1,
   "total_reviews_before_cutoff": 311.0,
   "unique_reviewers_before_cutoff": 311.0,

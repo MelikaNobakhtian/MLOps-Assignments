@@ -29,7 +29,8 @@ class ListingFeatures(BaseModel):
                 "minimum_nights": 3,
                 "maximum_nights": 356,
                 "instant_bookable": False,
-                "host_is_superhost": True,
+                # I changed this part becuase our field was "is_superhost"
+                "is_superhost": True,
                 "host_listing_count": 1,
                 "total_reviews_before_cutoff": 311.0,
                 "unique_reviewers_before_cutoff": 311.0,
@@ -61,7 +62,7 @@ class ListingFeatures(BaseModel):
     maximum_nights: int = Field(..., ge=0)
 
     instant_bookable: bool
-    host_is_superhost: bool
+    is_superhost: bool
     host_listing_count: int = Field(..., ge=0)
 
     total_reviews_before_cutoff: Optional[float] = Field(..., ge=0)

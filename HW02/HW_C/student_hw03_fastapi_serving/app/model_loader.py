@@ -6,6 +6,10 @@ from typing import Any, Dict, Optional
 # TODO: import os, mlflow, mlflow.sklearn, MlflowClient when implementing.
 from . import config
 
+import os
+import mlflow
+import mlflow.sklearn
+from mlflow.tracking import MlflowClient
 
 @dataclass
 class LoadedModelState:
@@ -39,14 +43,66 @@ class ModelService:
         #   os.environ["MLFLOW_TRACKING_USERNAME"] = config.MLFLOW_TRACKING_USERNAME
         #   os.environ["MLFLOW_TRACKING_PASSWORD"] = config.MLFLOW_TRACKING_PASSWORD
         #   mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
-        #   model = mlflow.sklearn.load_model(f"runs:/{config.MLFLOW_RUN_ID}/model")
-        self.state.loaded = False
-        self.state.error = "TODO: load model from MLflow."
+        #   model = mlflow.sklearn.load_model(f"runs:/{config.MLFLOW_RUN_ID}/model" 
+        try:
+            # Set credentials
+            os.environ["MLFLOW_TRACKING_USERNAME"] = config.MLFLOW_TRACKING_USERNAME
+            os.environ["MLFLOW_TRACKING_PASSWORD"] = config.MLFLOW_TRACKING_PASSWORD
+            mlflow.set_tracking_uri(config.MLFLOW_TRACKING_URI)
+
+            client = MlflowClient()
+
+            # Resolve run ID
+            run_id = self._resolve_run_id(client)
+            
+
+            # Load run metadata
+            run = client.get_run(run_id)
+            
+            self.state.run_id   = run_id
+            self.state.run_name = run.data.tags.get("mlflow.runName", run_id)
+            self.state.metrics  = dict(run.data.metrics)
+            self.state.params   = dict(run.data.params)
+            self.state.tags     = dict(run.data.tags)
+
+            # Load model natively via mlflow.sklearn
+            model_uri = f"runs:/{run_id}/model"
+            self.state.model_uri = model_uri
+            self.state.model = mlflow.sklearn.load_model(model_uri)
+
+            self.state.loaded = True
+            self.state.error  = None
+            print(f"Model loaded from run {run_id} ({self.state.run_name})")
+
+        except Exception as exc:
+            self.state.loaded = False
+            self.state.error  = str(exc)
+            print(f"Model loading failed: {exc}")
+            
+    def _resolve_run_id(self, client: MlflowClient) -> str:
+        if config.MLFLOW_RUN_ID:
+            return config.MLFLOW_RUN_ID
+
+        experiment = client.get_experiment_by_name(config.MLFLOW_EXPERIMENT_NAME)
+        if experiment is None:
+            raise RuntimeError(f"Experiment not found: {config.MLFLOW_EXPERIMENT_NAME}")
+
+        runs = client.search_runs(
+            experiment_ids=[experiment.experiment_id],
+            filter_string="tags.leakage_status = 'clean'",
+            order_by=["metrics.f1 DESC"],
+            max_results=1,
+        )
+        if not runs:
+            raise RuntimeError("No clean runs found in experiment.")
+
+        return runs[0].info.run_id
 
     def require_model(self):
         if not self.state.loaded or self.state.model is None:
             raise RuntimeError(self.state.error or "Model is not loaded.")
         return self.state.model
+    
 
     def model_info(self) -> dict:
         return {
