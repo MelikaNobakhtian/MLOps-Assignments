@@ -9,3 +9,5 @@ HW02/.env
 HW02/HW_C/student_hw03_fastapi_serving/run_local.cmd
 HW02/.env
 *.cmd
+HW03/HW3_Student/HW3_Student/HW3_A/.env.example
+HW03/HW3_Student/HW3_Student/HW3_A/.env

@@ -1,4 +1,24 @@
 {
   "format_version": 1,
-  "files": {}
+  "files": {
+    "metadata.json": "fe6fb7e1ed132cec715fb485af692b1eadebe734f808d8f2854bddf76cab3bfb",
+    "model\\.cache\\huggingface\\.gitignore": "684888c0ebb17f374298b65ee2807526c066094c701bcc7ebbe1c1095f494fc1",
+    "model\\.cache\\huggingface\\CACHEDIR.TAG": "e8893e2dcb3f4545ef67a0a5b7b769113d38eef1aa61c7c7ba14659b02af955f",
+    "model\\.cache\\huggingface\\download\\config.json.metadata": "9fb1110d51a410bc4cb3495980d7dfb2407443ebe971cf987297303519925b37",
+    "model\\.cache\\huggingface\\download\\model.safetensors.metadata": "3a577d5e7f32f992c3a5e86232a227f5c7a307401486d2bb7cf3f3fc392e08f9",
+    "model\\.cache\\huggingface\\download\\special_tokens_map.json.metadata": "fdaf36b532935b3dfa751faa33cac6e29c7f51090306a573120cc262b776b056",
+    "model\\.cache\\huggingface\\download\\tokenizer.json.metadata": "8eac964e51459d2c3ba5cfa821ddedb4c36a28ab324f358466056d02741ba7c8",
+    "model\\.cache\\huggingface\\download\\tokenizer_config.json.metadata": "c2ac44b17759c44e984ab8dde3071f049631a615e1baf63fc4b9fdced1d87c4e",
+    "model\\.cache\\huggingface\\download\\vocab.txt.metadata": "2f14cb4b1c30aef71afbfea6915ba5df2f689ddf9d4bff44673fcb33eacde35f",
+    "model\\.commit": "d36d67e02523717e3871dbcce928f122ed24afbcd375ca81600d4474cb618134",
+    "model\\.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "model\\config.json": "953f9c0d463486b10a6871cc2fd59f223b2c70184f49815e7efbcab5d8908b41",
+    "model\\model.safetensors": "53aa51172d142c89d9012cce15ae4d6cc0ca6895895114379cacb4fab128d9db",
+    "model\\special_tokens_map.json": "303df45a03609e4ead04bc3dc1536d0ab19b5358db685b6f3da123d05ec200e3",
+    "model\\tokenizer.json": "be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037",
+    "model\\tokenizer_config.json": "acb92769e8195aabd29b7b2137a9e6d6e25c476a4f15aa4355c233426c61576b",
+    "model\\vocab.txt": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+    "predict.py": "4b8c78822dd5a8929ea6147281b5ceb7191d57f543e2b0c6d84cf3561dd4e3e8",
+    "requirements.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
 }

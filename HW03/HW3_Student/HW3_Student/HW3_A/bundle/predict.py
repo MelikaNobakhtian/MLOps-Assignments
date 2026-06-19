@@ -28,6 +28,9 @@ from typing import List, Tuple
 # HINT: from transformers import AutoModel, AutoTokenizer
 # HINT: import torch, torch.nn.functional as F
 
+from transformers import AutoModel, AutoTokenizer
+import torch, torch.nn.functional as F
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -38,6 +41,11 @@ EMBEDDING_DIM = 384
 # ---------------------------------------------------------------------------
 # TODO: Implement these 4 functions
 # ---------------------------------------------------------------------------
+
+_MODEL = None
+_TOKENIZER = None
+_DEVICE = None
+MODEL_NAME = os.getenv("EMBEDDING_MODEL_ID", "sentence-transformers/all-MiniLM-L6-v2")
 
 def load_bundle(bundle_dir: str | None = None) -> Tuple:
     """Load model and tokenizer from the bundle directory.
@@ -54,7 +62,21 @@ def load_bundle(bundle_dir: str | None = None) -> Tuple:
     # TODO: implement
     # HINT: set torch.manual_seed(0) for determinism
     # HINT: model.eval(), model.to(device)
-    raise NotImplementedError("TODO: load_bundle()")
+    global _MODEL, _TOKENIZER, _DEVICE
+ 
+    target = bundle_dir or BUNDLE_DIR
+ 
+    torch.manual_seed(0)
+ 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = AutoModel.from_pretrained(target)
+    tokenizer = AutoTokenizer.from_pretrained(target)
+ 
+    model.eval()          
+    model.to(device)
+ 
+    _MODEL, _TOKENIZER, _DEVICE = model, tokenizer, device
+    return model, tokenizer
 
 
 def embed(texts: List[str]) -> np.ndarray:
@@ -83,7 +105,36 @@ def embed(texts: List[str]) -> np.ndarray:
     # HINT: summed = (last_hidden * mask).sum(dim=1)
     # HINT: counts = mask.sum(dim=1).clamp(min=1e-9)
     # HINT: pooled = summed / counts
-    raise NotImplementedError("TODO: embed()")
+    if not texts:
+        return np.zeros((0, EMBEDDING_DIM), dtype=np.float32)
+    
+    if _MODEL is None:
+        load_bundle()
+    model, tokenizer, device = _MODEL, _TOKENIZER, _DEVICE
+    
+    encoded = tokenizer(
+        texts,
+        padding=True,
+        truncation=True,
+        max_length=MAX_SEQ_LEN,
+        return_tensors="pt",
+    )
+    
+    encoded = {k: v.to(device) for k, v in encoded.items()}
+    
+    with torch.no_grad():
+        output = model(**encoded)
+    last_hidden = output.last_hidden_state
+    
+    mask = encoded["attention_mask"].unsqueeze(-1).float()   # (N, seq_len, 1)
+    summed = (last_hidden * mask).sum(dim=1)                  # (N, 384)
+    counts = mask.sum(dim=1).clamp(min=1e-9)                  # (N, 1), avoid /0
+    pooled = summed / counts
+    
+    pooled = F.normalize(pooled, p=2, dim=1)
+ 
+    return pooled.detach().cpu().numpy().astype(np.float32)
+
 
 
 def similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -100,7 +151,14 @@ def similarity(a: np.ndarray, b: np.ndarray) -> float:
     HINT: float((a * b).sum()) — OR use np.dot(a, b)
     """
     # TODO: implement
-    raise NotImplementedError("TODO: similarity()")
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    na = float(np.linalg.norm(a))
+    nb = float(np.linalg.norm(b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return float(np.dot(a, b) / (na * nb))
+
 
 
 def info() -> dict:
@@ -114,7 +172,18 @@ def info() -> dict:
     """
     # TODO: implement
     # HINT: check if model is loaded, if not call load_bundle() first
-    raise NotImplementedError("TODO: info()")
+    if _MODEL is None:
+        load_bundle()
+        
+    return {
+        "model_name": MODEL_NAME,
+        "embedding_dim": EMBEDDING_DIM,
+        "max_seq_len": MAX_SEQ_LEN,
+        "device": _DEVICE,
+        "framework": "transformers",
+        "deterministic": True,
+        "bundle_dir": str(BUNDLE_DIR),
+    }
 
 
 # ---------------------------------------------------------------------------
