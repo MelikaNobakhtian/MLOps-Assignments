@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airbnb-serving
+  labels:
+    app: airbnb-serving
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: airbnb-serving
+  template:
+    metadata:
+      labels:
+        app: airbnb-serving
+    spec:
+      containers:
+        - name: airbnb-serving
+          image: qbc12-airbnb-serving:optimized
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: airbnb-serving-secret
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10

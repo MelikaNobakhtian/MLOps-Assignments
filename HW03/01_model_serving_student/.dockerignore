@@ -1,0 +1,39 @@
+# Version control
+.git
+.gitignore
+
+# Environment / secrets — never bake credentials into an image
+.env
+
+# Python cache and build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+build/
+dist/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE / OS clutter
+.vscode/
+.idea/
+.DS_Store
+
+# Project artifacts not needed inside the image
+reports/
+screenshots/
+k8s/
+*.ipynb
+
+# Data files — large, and the model is loaded from MLflow at runtime, not from local data
+data/
+*.parquet
+*.csv
