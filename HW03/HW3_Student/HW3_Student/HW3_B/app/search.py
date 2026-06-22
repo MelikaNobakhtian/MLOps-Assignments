@@ -23,3 +23,50 @@ from .schemas import SearchHit
 # HINT: SearchHit(id=str(h.id), score=float(h.score), text=row["text"], primary=row["primary_label"], labels=list(row["labels"]), lang=row["lang"], source=row["source"])
 # HINT: use time.perf_counter() to measure elapsed time
 # HINT: return empty list if no Qdrant hits: [], (time.perf_counter() - t0) * 1000.0
+def hybrid_search(
+    query_vector: List[float],
+    top_k: int,
+    lang: Optional[str] = None,
+    primary: Optional[str] = None,
+    exclude_neutral: bool = True,
+) -> tuple[List[SearchHit], float]:
+    t0 = time.perf_counter()
+
+    # 1. Vector search in Qdrant -> ranked (id, score, payload).
+    qdr_hits = client_qdrant.search(
+        collection=config.QDRANT_COLLECTION,
+        vector=query_vector,
+        top_k=top_k,
+        lang=lang,
+        primary=primary,
+        exclude_neutral=exclude_neutral,
+    )
+    if not qdr_hits:
+        return [], (time.perf_counter() - t0) * 1000.0
+
+    # 2. Resolve authoritative rows from Postgres, preserving Qdrant's order.
+    ids = [str(h.id) for h in qdr_hits]
+    pg_rows = client_pg.fetch_corpus_hits(ids)
+    rows_by_id = {row["id"]: row for row in pg_rows}
+
+    # 3. Zip the score (from Qdrant) with the content (from Postgres).
+    hits: List[SearchHit] = []
+    for h in qdr_hits:
+        row = rows_by_id.get(str(h.id))
+        if row is None:
+            # Vector exists but row was deleted from PG — skip rather than lie.
+            continue
+        hits.append(
+            SearchHit(
+                id=str(h.id),
+                score=float(h.score),
+                text=row["text"],
+                primary=row["primary_label"],
+                labels=list(row["labels"]) if row["labels"] is not None else [],
+                lang=row["lang"],
+                source=row["source"],
+            )
+        )
+
+    took_ms = (time.perf_counter() - t0) * 1000.0
+    return hits, took_ms

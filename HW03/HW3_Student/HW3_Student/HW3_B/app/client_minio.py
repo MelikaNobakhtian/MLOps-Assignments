@@ -14,7 +14,15 @@ from . import config
 # Read MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET, MINIO_PREFIX from env
 # HINT: use os.getenv() with sensible defaults
 # HINT: prefix should include STUDENT_USERNAME, e.g. f"{config.STUDENT_USERNAME}/"
-
+def get_credentials() -> dict:
+    """Collect MinIO connection settings from the environment."""
+    return {
+        "endpoint": os.getenv("MINIO_ENDPOINT", ""),
+        "access_key": os.getenv("MINIO_ACCESS_KEY", ""),
+        "secret_key": os.getenv("MINIO_SECRET_KEY", ""),
+        "bucket": os.getenv("MINIO_BUCKET", "hw03-bundles"),
+        "prefix": os.getenv("MINIO_PREFIX", f"{config.STUDENT_USERNAME}/"),
+    }
 
 # TODO: implement download_bundle(target_dir: Path) -> bool
 # Pull the bundle from MinIO into target_dir. Returns True on success.
@@ -27,3 +35,32 @@ from . import config
 # HINT: dest = target_dir / rel; dest.parent.mkdir(parents=True, exist_ok=True)
 # HINT: client.fget_object(bucket, obj.object_name, str(dest))
 # HINT: return True on success, False on any exception
+def download_bundle(target_dir: Path) -> bool:
+    try:
+        from minio import Minio
+
+        creds = get_credentials()
+        client = Minio(
+            creds["endpoint"],
+            access_key=creds["access_key"],
+            secret_key=creds["secret_key"],
+            secure=False,  # shared bootcamp MinIO is plain HTTP
+        )
+
+        bucket = creds["bucket"]
+        prefix = creds["prefix"]
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        for obj in client.list_objects(bucket, prefix=prefix, recursive=True):
+            if obj.is_dir:
+                continue
+            rel = obj.object_name[len(prefix):]
+            if not rel:
+                continue
+            dest = target_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            client.fget_object(bucket, obj.object_name, str(dest))
+
+        return True
+    except Exception:
+        return False

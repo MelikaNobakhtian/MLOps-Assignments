@@ -16,7 +16,7 @@ import time
 from contextlib import asynccontextmanager
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Response
 
 from . import client_pg, client_qdrant, config
 from . import predictor as predictor_mod
@@ -40,7 +40,7 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 
 # TODO: create a global ModelService instance
 # HINT: model_service = ModelService()
-
+model_service = ModelService()
 
 # TODO: define the lifespan context manager for FastAPI
 # @asynccontextmanager
@@ -53,11 +53,26 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 #         log.error("Bundle load FAILED: %s", model_service.state.error)
 #     yield
 #     log.info("HW3_B shutting down.")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load the bundle once at startup; log success/failure either way."""
+    log.info("HW3_B starting. BUNDLE_DIR=%s", config.BUNDLE_DIR)
+    model_service.load()
+    if model_service.state.loaded:
+        log.info("Bundle loaded: %s", model_service.state.bundle_dir)
+    else:
+        log.error("Bundle load FAILED: %s", model_service.state.error)
+    yield
+    log.info("HW3_B shutting down.")
 
 
 # TODO: create the FastAPI app instance
 # HINT: app = FastAPI(title=config.APP_TITLE, version=config.APP_VERSION, lifespan=lifespan)
-
+app = FastAPI(
+    title=config.APP_TITLE,
+    version=config.APP_VERSION,
+    lifespan=lifespan,
+)
 
 # ---------------------------------------------------------------------------
 # Root
@@ -68,7 +83,14 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 # @app.get("/", response_model=RootResponse, tags=["service"])
 # Return RootResponse with service name, version, and endpoint list
 # HINT: RootResponse(message="QBC12 HW3 Encoder API", docs="/docs", health="/health", version=config.APP_VERSION)
-
+@app.get("/", response_model=RootResponse, tags=["service"])
+def root() -> RootResponse:
+    return RootResponse(
+        message="QBC12 HW3 Encoder API",
+        docs="/docs",
+        health="/health",
+        version=config.APP_VERSION,
+    )
 
 # ---------------------------------------------------------------------------
 # Health
@@ -83,6 +105,28 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 # HINT: use client_qdrant.ping() and client_pg.ping()
 # HINT: bundle_ok = model_service.state.loaded
 # HINT: format bundle_dir as string from model_service.state.bundle_dir
+@app.get("/health", response_model=HealthResponse, tags=["service"])
+def health() -> HealthResponse:
+    bundle_ok = model_service.state.loaded
+    qdrant_ok = client_qdrant.ping()
+    pg_ok = client_pg.ping()
+
+    if bundle_ok and qdrant_ok and pg_ok:
+        overall = "ok"
+    elif bundle_ok:
+        overall = "degraded"
+    else:
+        overall = "degraded"
+
+    return HealthResponse(
+        status=overall,
+        bundle_loaded=bundle_ok,
+        bundle_dir=str(model_service.state.bundle_dir or ""),
+        qdrant_reachable=qdrant_ok,
+        pg_reachable=pg_ok,
+        error=None if bundle_ok else model_service.state.error,
+    )
+    
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +143,45 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 # HINT: model_service.metadata.get("model_name", "unknown")
 # HINT: model_service.metadata.get("embedding_dim", 384)
 
+@app.get("/model-info", response_model=ModelInfoResponse, tags=["model"])
+def model_info() -> ModelInfoResponse:
+    if not model_service.state.loaded:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"model not loaded: {model_service.state.error}",
+        )
+
+    meta = model_service.metadata
+    return ModelInfoResponse(
+        bundle_version=str(
+            meta.get("bundle_version") or meta.get("build_timestamp_utc") or config.APP_VERSION
+        ),
+        model_id=meta.get("model_name", "unknown"),
+        model_revision=meta.get("model_revision", "unknown"),
+        device=config.BUNDLE_DEVICE,
+        max_seq_len=int(meta.get("max_seq_len", config.EMBED_MAX_SEQ_LEN)),
+        embedding_dim=int(meta.get("embedding_dim", config.EMBED_DIM)),
+        bundle_dir=str(model_service.state.bundle_dir or ""),
+        qdrant_collection=config.QDRANT_COLLECTION,
+        qdrant_vector_count=client_qdrant.vector_count(config.QDRANT_COLLECTION),
+    )
+
+# ---------------------------------------------------------------------------
+# Kubernetes probe endpoints (Part C, Task 1)
+#   /healthz/live  — liveness + startup: always 200 while the process is up.
+#   /healthz/ready — readiness: 200 only once the model is loaded, else 503.
+# ---------------------------------------------------------------------------
+@app.get("/healthz/live", tags=["health"])
+def healthz_live():
+    return {"status": "live"}
+ 
+ 
+@app.get("/healthz/ready", tags=["health"])
+def healthz_ready(response: Response):
+    if getattr(app.state, "loaded", False):
+        return {"status": "ready", "model_loaded": True}
+    response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return {"status": "not_ready", "model_loaded": False}
 
 # ---------------------------------------------------------------------------
 # Embed
@@ -115,6 +198,22 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 # HINT: vectors = predictor_mod.embed_texts(model_service.require_predictor(), req.texts)
 # HINT: embeddings_list = vectors.tolist()
 # HINT: return EmbedResponse(count=len(req.texts), dim=vectors.shape[1], embeddings=embeddings_list)
+@app.post("/embed", response_model=EmbedResponse, tags=["embedding"])
+def embed(req: EmbedRequest) -> EmbedResponse:
+    if not model_service.state.loaded:
+        raise HTTPException(status_code=503, detail="model not loaded")
+    if len(req.texts) > config.EMBED_BATCH_HARD_CAP:
+        raise HTTPException(
+            status_code=413,
+            detail=f"batch too large: {len(req.texts)} > {config.EMBED_BATCH_HARD_CAP}",
+        )
+
+    vectors = predictor_mod.embed_texts(model_service.require_predictor(), req.texts)
+    return EmbedResponse(
+        count=len(req.texts),
+        dim=int(vectors.shape[1]),
+        embeddings=vectors.tolist(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +231,37 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 # HINT: best = hits[0]; label = best.payload.get("primary_label", "unknown")
 # HINT: return PredictResponse(text=req.text, predicted_label=label, confidence=best.score, matched_text=best.payload["text"], elapsed_ms=elapsed)
 
+@app.post("/predict", response_model=PredictResponse, tags=["embedding"])
+def predict(req: PredictRequest) -> PredictResponse:
+    if not model_service.state.loaded:
+        raise HTTPException(status_code=503, detail="model not loaded")
+
+    t0 = time.perf_counter()
+    vec = predictor_mod.embed_texts(model_service.require_predictor(), [req.text])[0].tolist()
+
+    try:
+        hits = client_qdrant.get_client().search(
+            collection_name=config.QDRANT_COLLECTION,
+            query_vector=vec,
+            limit=1,
+            with_payload=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"qdrant error: {exc}")
+
+    if not hits:
+        raise HTTPException(status_code=404, detail="no match found in corpus")
+
+    best = hits[0]
+    payload = best.payload or {}
+    elapsed = (time.perf_counter() - t0) * 1000.0
+    return PredictResponse(
+        text=req.text,
+        predicted_label=payload.get("primary_label", "unknown"),
+        confidence=float(best.score),
+        matched_text=payload.get("text", ""),
+        elapsed_ms=elapsed,
+    )
 
 # ---------------------------------------------------------------------------
 # Search
@@ -147,3 +277,29 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper())
 # HINT: query_vec_list = query_vec[0].tolist()
 # HINT: hits, took_ms = hybrid_search(query_vec_list, req.top_k, req.lang, req.primary, req.exclude_neutral)
 # HINT: return SearchResponse(query=req.query, count=len(hits), top_k=req.top_k, took_ms=took_ms, hits=hits)
+@app.post("/search", response_model=SearchResponse, tags=["search"])
+def search(req: SearchRequest) -> SearchResponse:
+    if not model_service.state.loaded:
+        raise HTTPException(status_code=503, detail="model not loaded")
+ 
+    query_vec = predictor_mod.embed_texts(model_service.require_predictor(), [req.query])
+    query_vec_list = query_vec[0].tolist()
+ 
+    try:
+        hits, took_ms = hybrid_search(
+            query_vec_list,
+            req.top_k,
+            req.lang,
+            req.primary,
+            req.exclude_neutral,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"search backend error: {exc}")
+ 
+    return SearchResponse(
+        query=req.query,
+        count=len(hits),
+        top_k=req.top_k,
+        took_ms=took_ms,
+        hits=hits,
+    )

@@ -20,7 +20,12 @@ echo
 echo "=== /embed ==="
 curl -s -X POST "${URL}/embed" \
   -H "Content-Type: application/json" \
-  -d @data/valid_embed_request.json | python -m json.tool | head -30
+  -d @data/valid_embed_request.json | head -c -300 ### I changed this because using the previous command in windows cause OS error.
 
 echo
 echo "Smoke OK. Open ${URL}/docs in a browser for the full Swagger."
+
+
+curl -s -X POST http://127.0.0.1:8000/embed \
+  -H "Content-Type: application/json" \
+  -d @data/valid_embed_request.json

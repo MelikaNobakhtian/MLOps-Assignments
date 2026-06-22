@@ -14,14 +14,40 @@ from . import config
 # HINT: use a module-level variable _client: Optional[QdrantClient] = None
 # HINT: implement get_client() -> QdrantClient that lazily creates the client
 # HINT: QdrantClient(url=config.QDRANT_URL, api_key=config.QDRANT_API_KEY or None, timeout=10.0)
+_client: Optional[QdrantClient] = None
+
+
+def get_client() -> QdrantClient:
+    """Return the shared QdrantClient, creating it on first use."""
+    global _client
+    if _client is None:
+        _client = QdrantClient(
+            url=config.QDRANT_URL,
+            api_key=config.QDRANT_API_KEY or None,
+            timeout=10.0,
+        )
+    return _client
+
 
 # TODO: implement ping() -> bool
 # Try to list collections to verify connectivity. Return True if reachable, False otherwise.
 # HINT: call get_client().get_collections()
-
+def ping() -> bool:
+    try:
+        get_client().get_collections()
+        return True
+    except Exception:
+        return False
+    
 # TODO: implement vector_count(collection: str) -> Optional[int]
 # Return the number of vectors in a collection, or None on error.
 # HINT: get_client().get_collection(collection_name=collection).vectors_count
+def vector_count(collection: str) -> Optional[int]:
+    try:
+        return get_client().get_collection(collection_name=collection).vectors_count
+    except Exception:
+        return None
+
 
 # TODO: implement search(collection, vector, top_k, lang, primary, exclude_neutral) -> List[models.ScoredPoint]
 # Run an ANN search with optional payload filters.
@@ -29,3 +55,53 @@ from . import config
 # HINT: must conditions for lang and primary (if provided)
 # HINT: must_not condition for primary="neutral" if exclude_neutral is True
 # HINT: call get_client().search(collection_name=..., query_vector=..., limit=..., query_filter=..., with_payload=True, with_vectors=False)
+
+def _build_filter(
+    lang: Optional[str],
+    primary: Optional[str],
+    exclude_neutral: bool,
+) -> Optional[models.Filter]:
+    
+    must: List[models.FieldCondition] = []
+    must_not: List[models.FieldCondition] = []
+
+    if lang:
+        must.append(
+            models.FieldCondition(key="lang", match=models.MatchValue(value=lang))
+        )
+    if primary:
+        must.append(
+            models.FieldCondition(
+                key="primary_label", match=models.MatchValue(value=primary)
+            )
+        )
+    if exclude_neutral:
+        must_not.append(
+            models.FieldCondition(
+                key="primary_label", match=models.MatchValue(value="neutral")
+            )
+        )
+
+    if not must and not must_not:
+        return None
+    return models.Filter(must=must or None, must_not=must_not or None)
+
+
+def search(
+    collection: str,
+    vector: List[float],
+    top_k: int,
+    lang: Optional[str] = None,
+    primary: Optional[str] = None,
+    exclude_neutral: bool = True,
+) -> List[models.ScoredPoint]:
+   
+    query_filter = _build_filter(lang, primary, exclude_neutral)
+    return get_client().search(
+        collection_name=collection,
+        query_vector=vector,
+        limit=top_k,
+        query_filter=query_filter,
+        with_payload=True,
+        with_vectors=False,
+    )

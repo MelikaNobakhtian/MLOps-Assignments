@@ -31,12 +31,15 @@ mc mb "qbc12/${MINIO_BUCKET}" 2>/dev/null || true
 echo "Bucket: ${MINIO_BUCKET}"
 
 # Upload the bundle (exclude git metadata, the .commit marker, etc.)
-echo "Uploading bundle/ → s3://${MINIO_BUCKET}/${MINIO_PREFIX}"
-mc cp --recursive \
-    --exclude "*.git*" \
-    --exclude "*.commit" \
-    "bundle/" \
-    "qbc12/${MINIO_BUCKET}/${MINIO_PREFIX}"
+# echo "Uploading bundle/ → s3://${MINIO_BUCKET}/${MINIO_PREFIX}"
+# mc cp --recursive \
+#     --exclude "*.git*" \
+#     --exclude "*.commit" \
+#     "bundle/" \
+#     "qbc12/${MINIO_BUCKET}/${MINIO_PREFIX}"
+# **Attention: I replaced the previous command with the following because Minio did not recognize `exclude` flag.
+
+mc cp --recursive "bundle/" "qbc12/${MINIO_BUCKET}/${MINIO_PREFIX}"
 
 echo ""
 echo "=== Verification ==="

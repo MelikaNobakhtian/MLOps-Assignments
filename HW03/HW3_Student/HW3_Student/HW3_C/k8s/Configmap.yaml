@@ -1,0 +1,9 @@
+# HW3_C Task 1 — ConfigMap (non-secret config)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: qbc12-hw03-c-melika-nobakhtian
+data:
+  log_level: "INFO"
+  threshold: "0.5"

@@ -26,12 +26,19 @@ from pathlib import Path
 
 def main() -> int:
     p = argparse.ArgumentParser(description="HW3_B reindex CLI")
-    p.add_argument("--input", required=True, help="JSON file: list of {text, primary, labels, lang, source}")
+    p.add_argument("--source", "--input", dest="source", required=True,
+               help="JSON file: list of {text, primary, labels, lang, source}")
     p.add_argument("--collection", default=os.getenv("QDRANT_COLLECTION", "qbc12_corpus"))
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--dry-run", action="store_true", help="compute but don't upsert")
     # TODO: add --since TIMESTAMP flag (ISO format). If set, skip rows where
     # row["timestamp"] < TIMESTAMP. Hint: use datetime.fromisoformat().
+    p.add_argument(
+        "--since",
+        default=None,
+        help="ISO timestamp; skip rows whose 'timestamp' is before this",
+    )
+    p.add_argument("--limit", type=int, default=None, help="process at most N rows")
     args = p.parse_args()
 
     print(f"[reindex] input={args.input} collection={args.collection} batch={args.batch_size} dry_run={args.dry_run}")
@@ -54,7 +61,7 @@ def main() -> int:
     print(f"[reindex] bundle loaded: {predictor.info()['bundle_dir']}")
 
     # Load corpus
-    input_path = Path(args.input)
+    input_path = Path(args.source)
     if not input_path.exists():
         print(f"FAIL: input file not found: {input_path}", file=sys.stderr)
         return 2
@@ -64,6 +71,9 @@ def main() -> int:
         print(f"FAIL: input must be a JSON list, got {type(corpus).__name__}", file=sys.stderr)
         return 2
     print(f"[reindex] {len(corpus)} rows loaded from {input_path}")
+    
+    if args.limit is not None:
+        corpus = corpus[: args.limit]
 
     # Embed in batches
     qc = QdrantClient(url=config.QDRANT_URL, api_key=config.QDRANT_API_KEY or None, timeout=30.0)

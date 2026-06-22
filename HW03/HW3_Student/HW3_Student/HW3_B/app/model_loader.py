@@ -44,6 +44,23 @@ _DEV_BUNDLE = str(
 # HINT: Path(env).resolve() if env else ...
 # HINT: use Path.exists() to check if a path exists
 
+def _resolve_bundle_dir() -> Path:
+    """Find the bundle directory, in priority order."""
+    
+    env = os.getenv("BUNDLE_DIR", "").strip()
+    if env:
+        return Path(env).resolve()
+
+    for candidate in (_DEFAULT_BUNDLE_IN_IMAGE, _DEV_BUNDLE):
+        p = Path(candidate).resolve()
+        if p.exists():
+            return p
+
+    raise FileNotFoundError(
+        "Could not locate the bundle. Set BUNDLE_DIR, or place it at "
+        f"{_DEFAULT_BUNDLE_IN_IMAGE} or {_DEV_BUNDLE}."
+    )
+
 
 # TODO: implement _sha256(path: Path) -> str
 # Compute SHA-256 hash of a file, reading in 1MB chunks.
@@ -52,6 +69,14 @@ _DEV_BUNDLE = str(
 # HINT:     for chunk in iter(lambda: f.read(1 << 20), b""):
 # HINT:         h.update(chunk)
 # HINT: return h.hexdigest()
+
+def _sha256(path: Path) -> str:
+    """SHA-256 of a file, read in 1 MB chunks (same algorithm as Part A)."""
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 # TODO: implement _verify_manifest(bundle_dir: Path) -> tuple[bool, str]
@@ -66,6 +91,37 @@ _DEV_BUNDLE = str(
 # HINT: manifest = json.loads(manifest_path.read_text())
 # HINT: check manifest.get("files", {})
 
+def _verify_manifest(bundle_dir: Path) -> tuple[bool, str]:
+    """Re-hash every file listed in MANIFEST.json and compare to the frozen SHA.
+
+    Returns (ok, message). This is the fail-fast integrity gate: if any file's
+    bytes differ from what Part A recorded, the service should not serve.
+    """
+    manifest_path = bundle_dir / "MANIFEST.json"
+    if not manifest_path.exists():
+        return False, "MANIFEST.json not found"
+
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as exc:
+        return False, f"MANIFEST.json is not valid JSON: {exc}"
+
+    files = manifest.get("files", {})
+    if not files:
+        return False, "MANIFEST.json has no 'files' entries"
+
+    for rel, expected in files.items():
+        if isinstance(expected, str) and expected.startswith("REPLACE"):
+            return False, f"manifest placeholder not filled for {rel}"
+        target = bundle_dir / rel
+        if not target.exists():
+            return False, f"missing file listed in manifest: {rel}"
+        actual = _sha256(target)
+        if actual != expected:
+            return False, f"SHA mismatch for {rel}"
+
+    return True, f"{len(files)} files OK"
+
 
 # TODO: define LoadState dataclass
 # @dataclass
@@ -75,6 +131,15 @@ _DEV_BUNDLE = str(
 #     bundle_dir: Optional[Path] = None
 #     manifest_ok: Optional[bool] = None
 #     manifest_msg: Optional[str] = None
+
+
+@dataclass
+class LoadState:
+    loaded: bool = False
+    error: Optional[str] = None
+    bundle_dir: Optional[Path] = None
+    manifest_ok: Optional[bool] = None
+    manifest_msg: Optional[str] = None
 
 
 # TODO: define ModelService dataclass
@@ -108,3 +173,65 @@ _DEV_BUNDLE = str(
 #     # TODO: implement info(self) -> dict
 #     # Return a dict with bundle status for debugging /model-info
 #     # HINT: return {"bundle_loaded": self.state.loaded, "bundle_dir": ..., "metadata": self.metadata, ...}
+
+@dataclass
+class ModelService:
+    state: LoadState = field(default_factory=LoadState)
+    predictor: Optional[object] = None     # the imported `predict` module
+    metadata: dict = field(default_factory=dict)
+
+    def load(self) -> None:
+        try:
+            bundle_dir = _resolve_bundle_dir()
+            self.state.bundle_dir = bundle_dir
+
+            ok, msg = _verify_manifest(bundle_dir)
+            self.state.manifest_ok = ok
+            self.state.manifest_msg = msg
+            if not ok:
+                raise RuntimeError(f"manifest verification failed: {msg}")
+
+            model_dir = bundle_dir / "model"
+            if not model_dir.exists():
+                raise FileNotFoundError(f"model subdirectory missing: {model_dir}")
+
+            if str(bundle_dir) not in sys.path:
+                sys.path.insert(0, str(bundle_dir))
+            import predict  
+
+            predict.load_bundle(str(model_dir))
+            self.predictor = predict
+
+            meta_path = bundle_dir / "metadata.json"
+            if meta_path.exists():
+                self.metadata = json.loads(meta_path.read_text())
+
+            self.state.loaded = True
+            self.state.error = None
+        except Exception as exc:  
+            self.state.loaded = False
+            self.state.error = f"{type(exc).__name__}: {exc}"
+            self.predictor = None
+
+    def require_predictor(self) -> object:
+        """Return the predictor (predict module). Raise if not loaded."""
+        if not self.state.loaded or self.predictor is None:
+            raise RuntimeError(
+                f"bundle not loaded: {self.state.error or 'unknown error'}"
+            )
+        return self.predictor
+
+    def info(self) -> dict:
+        """Bundle status, used to build /model-info and /health payloads."""
+        return {
+            "bundle_loaded": self.state.loaded,
+            "bundle_dir": str(self.state.bundle_dir) if self.state.bundle_dir else "",
+            "manifest_ok": self.state.manifest_ok,
+            "manifest_msg": self.state.manifest_msg,
+            "error": self.state.error,
+            "metadata": self.metadata,
+        }
+
+
+# Single global instance
+model_service = ModelService()
