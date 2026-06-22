@@ -14,3 +14,5 @@ HW03/HW3_Student/HW3_Student/HW3_A/.env
 HW03/HW3_Student/HW3_Student/HW3_B/.env.example
 HW03/HW3_Student/HW3_Student/SHARED.txt
 HW03/HW3_Student/HW3_Student/HW3_C/kubeconfig.yaml
+HW03/HW3_Student/HW3_Student/HW3_C/.env.example
+HW03/HW3_Student/HW3_Student/HW3_C/.env
