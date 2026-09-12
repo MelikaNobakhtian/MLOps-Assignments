@@ -16,3 +16,22 @@ HW03/HW3_Student/HW3_Student/SHARED.txt
 HW03/HW3_Student/HW3_Student/HW3_C/kubeconfig.yaml
 HW03/HW3_Student/HW3_Student/HW3_C/.env.example
 HW03/HW3_Student/HW3_Student/HW3_C/.env
+
+# --- Add these lines to your existing .gitignore ---
+
+# Secrets / environment files
+.env
+.env.*
+*.env
+
+# Large model / data artifacts (track with DVC instead)
+*.safetensors
+*.tar.gz
+*.bin
+*.ckpt
+data/features/*.parquet
+data/features/*.csv
+
+# Kubernetes secrets you fill in locally
+**/k8s/secret.yaml
+!**/k8s/secret.yaml.example
